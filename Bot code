@@ -1,0 +1,101 @@
+import nltk
+import numpy as np
+import random
+import string
+
+import bs4 as bs
+import requests
+import re
+import warnings
+warnings.filterwarnings = False
+
+
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+nltk.download('punkt')
+nltk.download('wordnet')
+
+r = requests.get('https://en.wikipedia.org/wiki/COVID-19', 'https://en.wikipedia.org/wiki/COVID-19_vaccine')
+raw_html = r.text
+
+##cleaning up and extracting paragraphs from html and concatenating them also lowering the texts
+corpus_html = bs.BeautifulSoup(raw_html)
+corpus_paras = corpus_html.find_all('p')
+corpus_text = ''
+
+for para in corpus_paras:
+  corpus_text += para.text
+
+corpus_text = corpus_text.lower()
+
+##getting rid of empty spaces and special characters
+corpus_text = re.sub(r'\[[0-9]*\]', ' ' , corpus_text)
+corpus_text = re.sub(r'\s+', ' ', corpus_text)
+
+##text to sentences and word tokens
+corpus_sentences = nltk.sent_tokenize(corpus_text)
+corpus_word = nltk.word_tokenize(corpus_text)
+
+## predefined inputs
+greeting_inputs = ("hey","good morning","good evening","morning","evening","hi","what's up","hello","good afternoon","afternoon","heya")
+greeting_responses = ("Hello !","hi","hi there","welcome","hey","hey how are you?","nods","hello,how you doing" )
+
+def greet_response(greeting):
+  for token in greeting.split():
+    if token.lower() in greeting_inputs:
+      return random.choice(greeting_responses)
+
+##lemmatizing the corpus
+wn_lemmatizer = nltk.stem.WordNetLemmatizer()
+
+def lemmatize_corpus(tokens):
+  return [wn_lemmatizer.lemmatize(token) for token in tokens]
+
+punct_removal_dict = dict((ord(punctuation), None) for punctuation in string.punctuation)
+
+def get_processed_text(document):
+  return lemmatize_corpus(nltk.word_tokenize(document.lower().translate(punct_removal_dict)))
+##language modeling
+def respond(user_input):
+
+  bot_response = ''
+  corpus_sentences.append(user_input)
+
+  word_vectorizer = CountVectorizer(tokenizer=get_processed_text, stop_words='english')
+  corpus_word_vectors = word_vectorizer.fit_transform(corpus_sentences)
+
+  cos_sim_vectors = cosine_similarity(corpus_word_vectors[-1], corpus_word_vectors)
+  similar_response_idx = cos_sim_vectors.argsort()[0][-2]
+
+  matched_vector = cos_sim_vectors.flatten()
+  matched_vector.sort()
+  vector_matched = matched_vector[-2]
+
+  if vector_matched ==0:
+    bot_response = bot_response + "I am sorry, What is it, again?"
+    return bot_response
+  else:
+    bot_response = bot_response + corpus_sentences[similar_response_idx]
+    return bot_response
+
+## main body
+chat =  True
+print("Hello, what do you want to learn about Covid 19?")
+while(chat == True):
+  user_query = input()
+  user_query = user_query.lower()
+  if user_query != 'quit':
+    if user_query == 'thanks' or user_query == 'thank you':
+      chat = False
+      print("Covid 19 info desk: You are Welcome and stay safe")
+    else:
+      if greet_response(user_query) != None:
+        print("Covid 19 info desk: " + greet_response(user_query))
+      else:
+        print("Covid 19 info desk: ", end =" ")
+        print(respond(user_query))
+        corpus_sentences.remove(user_query)
+  else:
+    chat = False
+    print("Covid 19 info desk: Staf safe and healthy")
